@@ -1,0 +1,1 @@
+/usr/bin/c++ CMakeFiles/regex_nfa_cli.dir/src/main.cpp.o -o regex_nfa_cli  libregexnfa_lib.a 

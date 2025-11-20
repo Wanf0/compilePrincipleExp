@@ -1,0 +1,2 @@
+/usr/bin/ar qc libregexnfa_lib.a CMakeFiles/regexnfa_lib.dir/src/nfa.cpp.o CMakeFiles/regexnfa_lib.dir/src/regex_parser.cpp.o CMakeFiles/regexnfa_lib.dir/src/thompson.cpp.o
+/usr/bin/ranlib libregexnfa_lib.a

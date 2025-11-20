@@ -1,0 +1,6 @@
+a(b|c)*        ← the regex
+abc            ← test string 1
+accc           ← test string 2
+ab             ← test string 3
+b              ← test string 4
+#              ← end of test cases
