@@ -45,6 +45,8 @@ public:
     // Simulation
     bool accepts(const std::string& s) const;
 
+    void export_png(const std::string& filename) const;
+
 private:
     int next_id;  // next state id
     int start;    // start state id
