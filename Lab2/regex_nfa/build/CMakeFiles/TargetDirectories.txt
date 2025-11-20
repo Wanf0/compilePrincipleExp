@@ -1,9 +1,0 @@
-/home/yanghao/compilationPrinciples/Lab2/regex_nfa/build/CMakeFiles/regexnfa_lib.dir
-/home/yanghao/compilationPrinciples/Lab2/regex_nfa/build/CMakeFiles/regex_nfa_cli.dir
-/home/yanghao/compilationPrinciples/Lab2/regex_nfa/build/CMakeFiles/regex_nfa_test.dir
-/home/yanghao/compilationPrinciples/Lab2/regex_nfa/build/CMakeFiles/edit_cache.dir
-/home/yanghao/compilationPrinciples/Lab2/regex_nfa/build/CMakeFiles/rebuild_cache.dir
-/home/yanghao/compilationPrinciples/Lab2/regex_nfa/build/CMakeFiles/list_install_components.dir
-/home/yanghao/compilationPrinciples/Lab2/regex_nfa/build/CMakeFiles/install.dir
-/home/yanghao/compilationPrinciples/Lab2/regex_nfa/build/CMakeFiles/install/local.dir
-/home/yanghao/compilationPrinciples/Lab2/regex_nfa/build/CMakeFiles/install/strip.dir

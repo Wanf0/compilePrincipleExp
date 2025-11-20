@@ -2,23 +2,27 @@
 #pragma once
 #include "nfa.h"
 #include <string>
+#include <stack>
 
 namespace regexnfa {
 
 class ThompsonBuilder {
 public:
-    // Build NFA from a regex string
-    static NFA build_from_regex(const std::string& regex);
+    // Build NFA from regex string (supports +, ?, *, |, concatenation)
+    static NFA build_from_regex(const std::string &regex);
 
 private:
-    // Basic NFA constructors
+    // Helpers for constructing NFAs
     static NFA symbol(char c);
-    static NFA kleene_star(const NFA& frag);
-    static NFA concatenate(const NFA& a, const NFA& b);
-    static NFA alternate(const NFA& a, const NFA& b);
+    static NFA concatenate(const NFA &a, const NFA &b);
+    static NFA alternate(const NFA &a, const NFA &b);
+    static NFA kleene_star(const NFA &a);
+    static NFA plus(const NFA &a);  // a+ = a.a*
+    static NFA question(const NFA &a); // a? = a|ε
 
-    // Convert regex to postfix notation
-    static std::string regex_to_postfix(const std::string& regex);
+    // Regex parsing helpers
+    static std::string insert_concatenation(const std::string &regex);
+    static std::string to_postfix(const std::string &regex);
 };
 
 } // namespace regexnfa

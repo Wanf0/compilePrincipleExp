@@ -1,136 +1,193 @@
 
 #include "thompson.h"
-#include <stack>
+#include <cctype>
 #include <stdexcept>
 
 namespace regexnfa {
 
-// --- Helper constructors ---
+// ---------- Public function ----------
+NFA ThompsonBuilder::build_from_regex(const std::string &regex) {
+    std::string expanded = insert_concatenation(regex); // insert '.' automatically
+    std::string postfix = to_postfix(expanded);
+
+    std::stack<NFA> st;
+
+    for (char ch : postfix) {
+        switch (ch) {
+            case '.': {
+                NFA b = st.top(); st.pop();
+                NFA a = st.top(); st.pop();
+                st.push(concatenate(a, b));
+                break;
+            }
+            case '|': {
+                NFA b = st.top(); st.pop();
+                NFA a = st.top(); st.pop();
+                st.push(alternate(a, b));
+                break;
+            }
+            case '*': {
+                NFA a = st.top(); st.pop();
+                st.push(kleene_star(a));
+                break;
+            }
+            case '+': {
+                NFA a = st.top(); st.pop();
+                st.push(plus(a));
+                break;
+            }
+            case '?': {
+                NFA a = st.top(); st.pop();
+                st.push(question(a));
+                break;
+            }
+            default: {
+                st.push(symbol(ch));
+                break;
+            }
+        }
+    }
+
+    if (st.size() != 1) throw std::runtime_error("Invalid regex");
+    return st.top();
+}
+
+// ---------- Helper NFA builders ----------
 NFA ThompsonBuilder::symbol(char c) {
     NFA nfa;
     int s = nfa.new_state();
     int f = nfa.new_state();
-    nfa.add_transition(s, c, f);
     nfa.start = s;
     nfa.accepts_set.insert(f);
+    nfa.add_transition(s, c, f);
     return nfa;
 }
 
-NFA ThompsonBuilder::kleene_star(const NFA& frag) {
-    NFA out;
-    int s = out.new_state();
-    int f = out.new_state();
-    // Copy all states and transitions
-    for (auto& kv : frag.trans) {
-        for (const auto& t : kv.second) {
-            out.trans[kv.first].push_back({t.symbol, t.dest});
+NFA ThompsonBuilder::concatenate(const NFA &a, const NFA &b) {
+    NFA out = a;
+    for (int f : a.accepts_set) {
+        for (auto &t : b.trans.at(b.start)) {
+            out.add_transition(f, t.symbol, t.dest);
         }
     }
-    for (int a : frag.accepts_set) {
-        out.trans[a].push_back({EPSILON, frag.start});
-        out.trans[a].push_back({EPSILON, f});
-    }
-    out.trans[s].push_back({EPSILON, frag.start});
-    out.trans[s].push_back({EPSILON, f});
-    out.start = s;
-    out.accepts_set.insert(f);
+    out.accepts_set = b.accepts_set;
     return out;
 }
 
-NFA ThompsonBuilder::concatenate(const NFA& a, const NFA& b) {
-    NFA out;
-    // Copy a
-    for (auto& kv : a.trans) {
-        for (const auto& t : kv.second) out.trans[kv.first].push_back({t.symbol, t.dest});
-    }
-    // Copy b
-    for (auto& kv : b.trans) {
-        for (const auto& t : kv.second) out.trans[kv.first].push_back({t.symbol, t.dest});
-    }
-    // Connect a's accept states to b's start
-    for (int x : a.accepts_set) {
-        out.trans[x].push_back({EPSILON, b.start_state()});
-    }
-    out.start = a.start_state();
-    out.accepts_set = b.accept_states();
-    return out;
-}
-
-NFA ThompsonBuilder::alternate(const NFA& a, const NFA& b) {
+NFA ThompsonBuilder::alternate(const NFA &a, const NFA &b) {
     NFA out;
     int s = out.new_state();
     int f = out.new_state();
-    // Copy a
-    for (auto& kv : a.trans)
-        for (const auto& t : kv.second)
-            out.trans[kv.first].push_back({t.symbol, t.dest});
-    // Copy b
-    for (auto& kv : b.trans)
-        for (const auto& t : kv.second)
-            out.trans[kv.first].push_back({t.symbol, t.dest});
-    // Connect new start to both
-    out.trans[s].push_back({EPSILON, a.start_state()});
-    out.trans[s].push_back({EPSILON, b.start_state()});
-    // Connect accepts to new final state
-    for (int x : a.accept_states()) out.trans[x].push_back({EPSILON, f});
-    for (int x : b.accept_states()) out.trans[x].push_back({EPSILON, f});
+
+    // copy a
+    for (const auto &[from, vec] : a.trans)
+        for (const auto &t : vec) out.add_transition(from, t.symbol, t.dest);
+    for (int fa : a.accepts_set) out.add_transition(fa, EPSILON, f);
+
+    // copy b
+    for (const auto &[from, vec] : b.trans)
+        for (const auto &t : vec) out.add_transition(from, t.symbol, t.dest);
+    for (int fb : b.accepts_set) out.add_transition(fb, EPSILON, f);
+
     out.start = s;
     out.accepts_set.insert(f);
     return out;
 }
 
-// --- Convert infix regex to postfix ---
-std::string ThompsonBuilder::regex_to_postfix(const std::string& regex) {
-    // Simple Shunting Yard implementation (assumes valid regex)
+NFA ThompsonBuilder::kleene_star(const NFA &a) {
+    NFA out;
+    int s = out.new_state();
+    int f = out.new_state();
+
+    // copy a
+    for (const auto &[from, vec] : a.trans)
+        for (const auto &t : vec) out.add_transition(from, t.symbol, t.dest);
+
+    // connect new start and new end
+    out.add_transition(s, EPSILON, a.start);
+    out.add_transition(s, EPSILON, f);
+    for (int fa : a.accepts_set) {
+        out.add_transition(fa, EPSILON, a.start);
+        out.add_transition(fa, EPSILON, f);
+    }
+
+    out.start = s;
+    out.accepts_set.insert(f);
+    return out;
+}
+
+NFA ThompsonBuilder::plus(const NFA &a) {
+    NFA star = kleene_star(a);
+    return concatenate(a, star);
+}
+
+NFA ThompsonBuilder::question(const NFA &a) {
+    NFA empty;
+    int s = empty.new_state();
+    int f = empty.new_state();
+    empty.start = s;
+    empty.accepts_set.insert(f);
+    empty.add_transition(s, EPSILON, f);
+    return alternate(a, empty);
+}
+
+// ---------- Regex parsing helpers ----------
+bool is_operator(char c) {
+    return c == '*' || c == '+' || c == '?' || c == '|' || c == '.';
+}
+
+int precedence(char op) {
+    switch (op) {
+        case '*': case '+': case '?': return 3;
+        case '.': return 2;
+        case '|': return 1;
+        default: return 0;
+    }
+}
+
+// Convert infix to postfix using shunting-yard
+std::string ThompsonBuilder::to_postfix(const std::string &regex) {
     std::string out;
     std::stack<char> st;
+
     for (char c : regex) {
-        if (isalnum(c)) out += c;
-        else if (c == '(') st.push(c);
-        else if (c == ')') {
+        if (!is_operator(c) && c != '(' && c != ')') {
+            out += c;
+        } else if (c == '(') {
+            st.push(c);
+        } else if (c == ')') {
             while (!st.empty() && st.top() != '(') {
-                out += st.top();
-                st.pop();
+                out += st.top(); st.pop();
             }
-            st.pop(); // pop '('
+            if (!st.empty()) st.pop();
         } else {
-            while (!st.empty() && st.top() != '(') {
-                out += st.top();
-                st.pop();
+            while (!st.empty() && precedence(st.top()) >= precedence(c)) {
+                out += st.top(); st.pop();
             }
             st.push(c);
         }
     }
-    while (!st.empty()) {
-        out += st.top();
-        st.pop();
-    }
+
+    while (!st.empty()) { out += st.top(); st.pop(); }
     return out;
 }
 
-// --- Build from regex ---
-NFA ThompsonBuilder::build_from_regex(const std::string& regex) {
-    std::string postfix = regex_to_postfix(regex);
-    std::stack<NFA> st;
-    for (char ch : postfix) {
-        if (isalnum(ch)) st.push(symbol(ch));
-        else if (ch == '*') {
-            NFA frag = st.top(); st.pop();
-            st.push(kleene_star(frag));
-        } else if (ch == '.') {
-            NFA b = st.top(); st.pop();
-            NFA a = st.top(); st.pop();
-            st.push(concatenate(a, b));
-        } else if (ch == '|') {
-            NFA b = st.top(); st.pop();
-            NFA a = st.top(); st.pop();
-            st.push(alternate(a, b));
-        } else {
-            throw std::runtime_error("Unknown operator in regex");
+// Insert explicit concatenation operator '.'
+std::string ThompsonBuilder::insert_concatenation(const std::string &regex) {
+    std::string out;
+    for (size_t i = 0; i < regex.size(); ++i) {
+        char c1 = regex[i];
+        out += c1;
+        if (i + 1 < regex.size()) {
+            char c2 = regex[i + 1];
+            bool is_postfix = (c1 == '*' || c1 == '+' || c1 == '?');
+            bool need_concat = 
+              (c1 != '(' && c1 != '|' && !is_operator(c1) || is_postfix) &&
+              (c2 != ')' && c2 != '|' && !is_operator(c2));
+            if (need_concat) out += '.';
         }
     }
-    if (st.size() != 1) throw std::runtime_error("Invalid regex");
-    return st.top();
+    return out;
 }
 
 } // namespace regexnfa
