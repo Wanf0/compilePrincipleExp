@@ -52,6 +52,10 @@ NFA ThompsonBuilder::build_from_regex(const std::string &regex) {
     return st.top();
 }
 
+NFA ThompsonBuilder::build(const std::string &regex) {
+    return build_from_regex(regex);
+}
+
 // ---------- Helper NFA builders ----------
 NFA ThompsonBuilder::symbol(char c) {
     NFA nfa;

@@ -1,66 +1,70 @@
 
-#include <iostream>
-#include <fstream>
-#include <cstdlib>
 #include "nfa.h"
+#include "nfa_to_dfa.h"
 #include "thompson.h"
+#include <iostream>
+#include <string>
 
 using namespace regexnfa;
 
-// Helper function: write DOT file and call dot to generate PNG
-void visualize_nfa(const NFA &nfa, const std::string &filename_base) {
-    std::string dot_content = nfa.to_dot();
-    std::string dot_filename = filename_base + ".dot";
-    std::ofstream ofs(dot_filename);
-    if (!ofs) {
-        std::cerr << "Failed to write DOT file: " << dot_filename << std::endl;
-        return;
-    }
-    ofs << dot_content;
-    ofs.close();
-
-    // Call Graphviz dot to generate PNG
-    std::string cmd = "dot -Tpng " + dot_filename + " -o " + filename_base + ".png";
-    int ret = std::system(cmd.c_str());
-    if (ret != 0) {
-        std::cerr << "Graphviz dot command failed: " << cmd << std::endl;
-    } else {
-        std::cout << "Visualization generated: " << filename_base << ".png" << std::endl;
-    }
-}
-
 int main() {
-    std::cout << "Regex NFA Test\n";
-    std::cout << "Enter a regex (extended operators supported: +, *, ?, |, parentheses):\n";
-
+    ThompsonBuilder builder;
     std::string regex;
-    std::getline(std::cin, regex);
+
+    std::cout << "Enter regex: ";
+    std::cin >> regex;
 
     try {
-        NFA nfa = ThompsonBuilder::build_from_regex(regex);
-        std::cout << "NFA built successfully!\n";
+        // Build NFA
+        NFA nfa = builder.build(regex);
+        std::cout << "\nNFA:\n" << nfa.debug_dump();
 
-        std::cout << "Start state: S" << nfa.start_state() << "\nAccept states: ";
-        for (int s : nfa.accept_states()) std::cout << "S" << s << " ";
-        std::cout << "\n";
+        // Convert to DFA
+        DFA dfa = NFAtoDFA::convert(nfa);
 
-        std::cout << "\nDOT output preview (first 10 lines):\n";
-        std::string dot = nfa.to_dot();
-        size_t pos = 0, line_count = 0;
-        while (line_count < 10) {
-            size_t next = dot.find('\n', pos);
-            if (next == std::string::npos) break;
-            std::cout << dot.substr(pos, next - pos) << "\n";
-            pos = next + 1;
-            line_count++;
+        // Print DFA in readable form
+        std::cout << "\nDFA:\n";
+        for (auto &s : dfa.states) {
+            std::cout << "DFA State " << s.id << " { ";
+            for (int n : s.nfa_states) std::cout << n << " ";
+            std::cout << "} ";
+            if (s.is_accept) std::cout << "(ACCEPT)";
+            std::cout << "\n";
+
+            for (auto &kv : s.transitions) {
+                std::cout << "  -" << kv.first << "-> " << kv.second << "\n";
+            }
         }
 
-        // Generate DOT and PNG automatically
-        visualize_nfa(nfa, "nfa_visualization");
+        // Test strings
+        std::string test;
+        std::cout << "\nEnter string to test (q to quit): ";
+        while (std::cin >> test) {
+            if (test == "q") break;
 
-    } catch (const std::exception &e) {
-        std::cerr << "Error building NFA: " << e.what() << std::endl;
-        return 1;
+            bool accept_nfa = nfa.accepts(test);
+            bool accept_dfa = false;
+
+            int current = dfa.start_state;
+            for (char c : test) {
+                if (current == -1) break;
+                if (dfa.states[current].transitions.count(c))
+                    current = dfa.states[current].transitions[c];
+                else {
+                    current = -1;
+                    break;
+                }
+            }
+            if (current != -1 && dfa.states[current].is_accept)
+                accept_dfa = true;
+
+            std::cout << "String \"" << test << "\": NFA=" << accept_nfa
+                      << " DFA=" << accept_dfa << "\n";
+            std::cout << "Next string: ";
+        }
+
+    } catch (std::runtime_error &e) {
+        std::cerr << "Error: " << e.what() << std::endl;
     }
 
     return 0;

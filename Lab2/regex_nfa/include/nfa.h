@@ -58,6 +58,7 @@ private:
     void move(const std::unordered_set<int>& src, char symbol, std::unordered_set<int>& out) const;
 
     friend class ThompsonBuilder;
+    friend class NFAtoDFA;
 };
 
 } // namespace regexnfa

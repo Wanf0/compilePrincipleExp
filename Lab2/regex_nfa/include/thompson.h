@@ -8,6 +8,9 @@ namespace regexnfa {
 
 class ThompsonBuilder {
 public:
+    // Non-static wrapper for easier usage
+    NFA build(const std::string &regex);
+
     // Build NFA from regex string (supports +, ?, *, |, concatenation)
     static NFA build_from_regex(const std::string &regex);
 
@@ -17,8 +20,8 @@ private:
     static NFA concatenate(const NFA &a, const NFA &b);
     static NFA alternate(const NFA &a, const NFA &b);
     static NFA kleene_star(const NFA &a);
-    static NFA plus(const NFA &a);  // a+ = a.a*
-    static NFA question(const NFA &a); // a? = a|ε
+    static NFA plus(const NFA &a);        // a+ = a.a*
+    static NFA question(const NFA &a);    // a? = a|ε
 
     // Regex parsing helpers
     static std::string insert_concatenation(const std::string &regex);
