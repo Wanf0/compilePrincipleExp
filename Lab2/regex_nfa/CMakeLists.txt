@@ -1,4 +1,3 @@
-
 cmake_minimum_required(VERSION 3.10)
 project(regex_nfa LANGUAGES CXX)
 
@@ -6,7 +5,7 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-option(BUILD_TESTS "Build test_main.cpp executable" ON)
+option(BUILD_TESTS "Build test executables" ON)
 
 include_directories(${CMAKE_SOURCE_DIR}/include)
 
@@ -25,10 +24,13 @@ target_include_directories(regexnfa_lib PUBLIC ${CMAKE_SOURCE_DIR}/include)
 add_executable(regex_nfa_cli src/main.cpp)
 target_link_libraries(regex_nfa_cli PRIVATE regexnfa_lib)
 
-# ---- Test executable (test_main.cpp) ----
-if (BUILD_TESTS)
-    add_executable(regex_nfa_test src/test_main.cpp)
-    target_link_libraries(regex_nfa_test PRIVATE regexnfa_lib)
+# ---- Test executables ----
+if(BUILD_TESTS)
+  add_executable(regex_nfa_test src/test_main.cpp)
+  target_link_libraries(regex_nfa_test PRIVATE regexnfa_lib)
+
+  add_executable(NFA_TEST src/NFA_test_main.cpp)
+  target_link_libraries(NFA_TEST PRIVATE regexnfa_lib)
 endif()
 
 install(TARGETS regex_nfa_cli RUNTIME DESTINATION bin)
