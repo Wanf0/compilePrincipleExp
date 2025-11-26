@@ -16,6 +16,7 @@ add_library(regexnfa_lib
     src/thompson.cpp
     src/dfa.cpp
     src/nfa_to_dfa.cpp
+    src/dfa_minimizer.cpp  # 新增文件
 )
 
 target_include_directories(regexnfa_lib PUBLIC ${CMAKE_SOURCE_DIR}/include)
@@ -32,9 +33,10 @@ if(BUILD_TESTS)
   add_executable(NFA_TEST src/NFA_test_main.cpp)
   target_link_libraries(NFA_TEST PRIVATE regexnfa_lib)
 
-  # ---- NEW: DFA test executable ----
+  # ---- DFA test executable ----
   add_executable(DFA_TEST src/DFA_test_main.cpp)
   target_link_libraries(DFA_TEST PRIVATE regexnfa_lib)
+
 endif()
 
 install(TARGETS regex_nfa_cli RUNTIME DESTINATION bin)

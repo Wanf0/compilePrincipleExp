@@ -1,123 +1,56 @@
+#include "../include/dfa_minimizer.h" // 新增头文件
 #include "../include/nfa_to_dfa.h"
 #include "../include/thompson.h"
 #include <fstream>
 #include <iostream>
-#include <sstream>
-#include <string>
 
 using namespace regexnfa;
 
-void print_dfa(const DFA &dfa) {
-  std::cout << "\nDFA States:\n";
-  for (const auto &s : dfa.states) {
-    std::cout << "DFA State " << s.id << " { ";
-    for (int n : s.nfa_states)
-      std::cout << n << " ";
-    std::cout << "} ";
-    if (s.is_accept)
-      std::cout << "(ACCEPT)";
-    std::cout << "\n";
-    for (const auto &kv : s.transitions)
-      std::cout << "  -" << kv.first << "-> " << kv.second << "\n";
-  }
-}
+int main() {
+  std::string regex;
+  std::cout << "Enter regex: ";
+  std::getline(std::cin, regex);
 
-void test_string(const NFA &nfa, const DFA &dfa, const std::string &str) {
-  bool accept_nfa = nfa.accepts(str);
-  bool accept_dfa = false;
+  try {
+    // 构建NFA
+    NFA nfa = ThompsonBuilder::build_from_regex(regex);
+    std::cout << "\n--- NFA ---\n";
+    std::cout << nfa.to_dot() << std::endl;
 
-  int current = dfa.start;
-  for (char c : str) {
-    if (dfa.states[current].transitions.count(c))
-      current = dfa.states[current].transitions.at(c);
-    else {
-      current = -1;
-      break;
-    }
-  }
-  if (current != -1 && dfa.states[current].is_accept)
-    accept_dfa = true;
+    // 转换为DFA
+    DFA dfa = NFAtoDFA::convert(nfa);
+    std::cout << "\n--- Original DFA ---\n";
+    dfa.print();
 
-  std::cout << "String \"" << str
-            << "\": NFA=" << (accept_nfa ? "ACCEPT" : "REJECT")
-            << ", DFA=" << (accept_dfa ? "ACCEPT" : "REJECT") << "\n";
-}
+    // 最小化DFA
+    DFA minimized_dfa = DFAMinimizer::minimize(dfa);
+    std::cout << "\n--- Minimized DFA ---\n";
+    minimized_dfa.print();
 
-void interactive_mode() {
-  std::cout << "Regex → NFA/DFA interactive mode\n";
-  std::cout << "Supports: *, +, ?, |, parentheses. Empty input to quit.\n";
-  while (true) {
-    std::cout << "regex> ";
-    std::string regex;
-    if (!std::getline(std::cin, regex) || regex.empty())
-      break;
+    // 保存原始DFA和最小化DFA的图形
+    std::ofstream orig_file("dfa_original.dot");
+    orig_file << dfa.to_dot();
+    orig_file.close();
 
-    try {
-      NFA nfa = ThompsonBuilder::build_from_regex(regex);
-      std::cout << "\nNFA built. Start= S" << nfa.start_state() << "\n";
-      std::cout << nfa.debug_dump() << "\n";
+    std::ofstream min_file("dfa_minimized.dot");
+    min_file << minimized_dfa.to_dot();
+    min_file.close();
 
-      DFA dfa = NFAtoDFA::convert(nfa);
-      print_dfa(dfa);
+    std::cout << "\nDFA DOT files saved:\n";
+    std::cout << "  Original: dfa_original.dot\n";
+    std::cout << "  Minimized: dfa_minimized.dot\n";
 
-      std::string s;
-      while (true) {
-        std::cout << "\nEnter string to test (q to quit): ";
-        std::getline(std::cin, s);
-        if (s.empty() || s == "q")
-          break;
-        test_string(nfa, dfa, s);
-      }
+    // 生成PNG图片
+    system("dot -Tpng dfa_original.dot -o dfa_original.png");
+    system("dot -Tpng dfa_minimized.dot -o dfa_minimized.png");
+    std::cout << "PNG images generated:\n";
+    std::cout << "  Original: dfa_original.png\n";
+    std::cout << "  Minimized: dfa_minimized.png\n";
 
-    } catch (const std::exception &e) {
-      std::cerr << "Error: " << e.what() << "\n";
-    }
-  }
-}
-
-void batch_mode_from_file(const std::string &path) {
-  std::ifstream ifs(path);
-  if (!ifs) {
-    std::cerr << "Cannot open file: " << path << "\n";
-    return;
+  } catch (const std::exception &e) {
+    std::cerr << "Error: " << e.what() << std::endl;
+    return 1;
   }
 
-  std::string line;
-  while (std::getline(ifs, line)) {
-    if (line.empty() || line[0] == '#')
-      continue;
-
-    std::istringstream iss(line);
-    std::string regex, test, expected;
-    std::getline(iss, regex, '\t');
-    std::getline(iss, test, '\t');
-    std::getline(iss, expected, '\t');
-
-    try {
-      NFA nfa = ThompsonBuilder::build_from_regex(regex);
-      DFA dfa = NFAtoDFA::convert(nfa);
-      test_string(nfa, dfa, test);
-    } catch (const std::exception &e) {
-      std::cerr << "Error building regex '" << regex << "': " << e.what()
-                << "\n";
-    }
-  }
-}
-
-int main(int argc, char **argv) {
-  if (argc == 1) {
-    interactive_mode();
-  } else if (argc == 2) {
-    std::string arg = argv[1];
-    if (arg == "--help" || arg == "-h") {
-      std::cout << "Usage: regex_nfa_cli [tests_file.txt]\n"
-                << "If no file provided, interactive mode runs.\n";
-      return 0;
-    }
-    batch_mode_from_file(arg);
-  } else {
-    std::cerr << "Too many arguments\n";
-    return 2;
-  }
   return 0;
 }
