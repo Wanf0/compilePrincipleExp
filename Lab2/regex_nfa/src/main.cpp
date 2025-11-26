@@ -26,7 +26,7 @@ void test_string(const NFA &nfa, const DFA &dfa, const std::string &str) {
   bool accept_nfa = nfa.accepts(str);
   bool accept_dfa = false;
 
-  int current = dfa.start_state;
+  int current = dfa.start;
   for (char c : str) {
     if (dfa.states[current].transitions.count(c))
       current = dfa.states[current].transitions.at(c);

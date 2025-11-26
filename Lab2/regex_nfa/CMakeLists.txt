@@ -31,6 +31,10 @@ if(BUILD_TESTS)
 
   add_executable(NFA_TEST src/NFA_test_main.cpp)
   target_link_libraries(NFA_TEST PRIVATE regexnfa_lib)
+
+  # ---- NEW: DFA test executable ----
+  add_executable(DFA_TEST src/DFA_test_main.cpp)
+  target_link_libraries(DFA_TEST PRIVATE regexnfa_lib)
 endif()
 
 install(TARGETS regex_nfa_cli RUNTIME DESTINATION bin)

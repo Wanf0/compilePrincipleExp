@@ -1,29 +1,26 @@
-
 #pragma once
-#include <unordered_set>
-#include <unordered_map>
-#include <set>
-#include <vector>
 #include <iostream>
+#include <set>
+#include <string>
+#include <unordered_map>
+#include <vector>
 
 namespace regexnfa {
 
-// DFA State
 struct DFAState {
-    int id;  // sequential id
-    std::set<int> nfa_states;  // subset of NFA states
-    bool is_accept = false;
-    std::unordered_map<char, int> transitions;  // symbol -> DFAState id
+  int id;
+  std::set<int> nfa_states; // subset of NFA states
+  bool is_accept = false;
+  std::unordered_map<char, int> transitions; // symbol -> DFAState id
 };
 
-// Deterministic Finite Automaton
 class DFA {
 public:
-    int start;
-    std::vector<DFAState> states;
+  int start; // start state id
+  std::vector<DFAState> states;
 
-    void print() const;
-    bool accepts(const std::string &s) const;
+  void print() const;
+  std::string to_dot() const;
 };
 
 } // namespace regexnfa
