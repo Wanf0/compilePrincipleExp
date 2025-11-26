@@ -12,23 +12,23 @@ NFA::NFA() : next_id(0), start(-1) {}
 
 int NFA::new_state() { return next_id++; }
 
-// void NFA::export_png(const std::string &filename) const {
-//   std::string dotfile = filename + ".dot";
-//   std::ofstream ofs(dotfile);
-//   ofs << to_dot(); // Reuse your existing to_dot() function
-//   ofs.close();
-//
-//   // Call Graphviz to generate PNG
-//   std::string cmd = "dot -Tpng " + dotfile + " -o " + filename + ".png";
-//   int ret = system(cmd.c_str());
-//   if (ret != 0) {
-//     std::cerr << "Error generating PNG file!" << std::endl;
-//   } else {
-//     std::cout << "NFA visualization saved as " << filename << ".png"
-//               << std::endl;
-//   }
-// }
-//
+void NFA::export_png(const std::string &filename) const {
+  std::string dotfile = filename + ".dot";
+  std::ofstream ofs(dotfile);
+  ofs << to_dot(); // Reuse your existing to_dot() function
+  ofs.close();
+
+  // Call Graphviz to generate PNG
+  std::string cmd = "dot -Tpng " + dotfile + " -o " + filename + ".png";
+  int ret = system(cmd.c_str());
+  if (ret != 0) {
+    std::cerr << "Error generating PNG file!" << std::endl;
+  } else {
+    std::cout << "NFA visualization saved as " << filename << ".png"
+              << std::endl;
+  }
+}
+
 void NFA::add_transition(int from, char symbol, int to) {
   trans[from].push_back({symbol, to});
 }

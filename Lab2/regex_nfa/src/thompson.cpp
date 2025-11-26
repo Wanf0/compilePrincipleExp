@@ -1,6 +1,8 @@
 #include "../include/thompson.h"
 #include <cctype>
 #include <iostream>
+#include <map>
+#include <set>
 #include <stdexcept>
 
 namespace regexnfa {
@@ -9,7 +11,7 @@ namespace regexnfa {
 NFA ThompsonBuilder::build_from_regex(const std::string &regex) {
   std::string expanded =
       insert_concatenation(regex); // insert '.' automatically
-  // std::cout << expanded << std::endl;
+  std::cout << expanded << std::endl;
   std::string postfix = to_postfix(expanded);
 
   std::stack<NFA> st;
@@ -78,34 +80,98 @@ NFA ThompsonBuilder::symbol(char c) {
 }
 
 NFA ThompsonBuilder::concatenate(const NFA &a, const NFA &b) {
-  NFA out = a;
-  for (int f : a.accepts_set) {
-    for (auto &t : b.trans.at(b.start)) {
-      out.add_transition(f, t.symbol, t.dest);
-    }
+  NFA out = a; // copy all of a
+
+  // remap all states of b
+  std::set<int> states_b;
+  for (const auto &[from, vec] : b.trans) {
+    states_b.insert(from);
+    for (auto &t : vec)
+      states_b.insert(t.dest);
   }
-  out.accepts_set = b.accepts_set;
+  states_b.insert(b.start);
+  for (int fb : b.accepts_set)
+    states_b.insert(fb);
+
+  std::map<int, int> remap_b;
+  for (int st : states_b)
+    remap_b[st] = out.new_state(); // new state IDs in out
+
+  // copy transitions from b with remapped IDs
+  for (const auto &[from, vec] : b.trans) {
+    int new_from = remap_b[from];
+    for (const auto &t : vec)
+      out.add_transition(new_from, t.symbol, remap_b.at(t.dest));
+  }
+
+  // link a's accept states to b's start
+  for (int fa : a.accepts_set)
+    out.add_transition(fa, EPSILON, remap_b.at(b.start));
+
+  // new accept states = remapped b accepts
+  out.accepts_set.clear();
+  for (int fb : b.accepts_set)
+    out.accepts_set.insert(remap_b.at(fb));
+
   return out;
 }
 
 NFA ThompsonBuilder::alternate(const NFA &a, const NFA &b) {
   NFA out;
-  int s = out.new_state();
-  int f = out.new_state();
+  int s = out.new_state(); // new start
+  int f = out.new_state(); // new accept
 
-  // copy a
-  for (const auto &[from, vec] : a.trans)
-    for (const auto &t : vec)
-      out.add_transition(from, t.symbol, t.dest);
+  // --- remap a ---
+  std::set<int> states_a;
+  for (const auto &[from, vec] : a.trans) {
+    states_a.insert(from);
+    for (auto &t : vec)
+      states_a.insert(t.dest);
+  }
+  states_a.insert(a.start);
   for (int fa : a.accepts_set)
-    out.add_transition(fa, EPSILON, f);
+    states_a.insert(fa);
 
-  // copy b
-  for (const auto &[from, vec] : b.trans)
+  std::map<int, int> remap_a;
+  for (int st : states_a)
+    remap_a[st] = out.new_state();
+
+  for (const auto &[from, vec] : a.trans) {
+    int new_from = remap_a[from];
     for (const auto &t : vec)
-      out.add_transition(from, t.symbol, t.dest);
+      out.add_transition(new_from, t.symbol, remap_a.at(t.dest));
+  }
+
+  // --- remap b ---
+  std::set<int> states_b;
+  for (const auto &[from, vec] : b.trans) {
+    states_b.insert(from);
+    for (auto &t : vec)
+      states_b.insert(t.dest);
+  }
+  states_b.insert(b.start);
   for (int fb : b.accepts_set)
-    out.add_transition(fb, EPSILON, f);
+    states_b.insert(fb);
+
+  std::map<int, int> remap_b;
+  for (int st : states_b)
+    remap_b[st] = out.new_state();
+
+  for (const auto &[from, vec] : b.trans) {
+    int new_from = remap_b[from];
+    for (const auto &t : vec)
+      out.add_transition(new_from, t.symbol, remap_b.at(t.dest));
+  }
+
+  // connect new start to both a and b
+  out.add_transition(s, EPSILON, remap_a.at(a.start));
+  out.add_transition(s, EPSILON, remap_b.at(b.start));
+
+  // connect both a and b accepts to new accept
+  for (int fa : a.accepts_set)
+    out.add_transition(remap_a.at(fa), EPSILON, f);
+  for (int fb : b.accepts_set)
+    out.add_transition(remap_b.at(fb), EPSILON, f);
 
   out.start = s;
   out.accepts_set.insert(f);
@@ -114,20 +180,38 @@ NFA ThompsonBuilder::alternate(const NFA &a, const NFA &b) {
 
 NFA ThompsonBuilder::kleene_star(const NFA &a) {
   NFA out;
-  int s = out.new_state();
-  int f = out.new_state();
+  int s = out.new_state(); // new start
+  int f = out.new_state(); // new accept
 
-  // copy a
-  for (const auto &[from, vec] : a.trans)
+  // collect all states of a (including start and accept states)
+  std::set<int> states;
+  for (const auto &[from, vec] : a.trans) {
+    states.insert(from);
+    for (auto &t : vec)
+      states.insert(t.dest);
+  }
+  states.insert(a.start);
+  for (int fa : a.accepts_set)
+    states.insert(fa);
+
+  // remap all states to fresh ones
+  std::map<int, int> remap;
+  for (int st : states)
+    remap[st] = out.new_state();
+
+  // copy transitions
+  for (const auto &[from, vec] : a.trans) {
+    int new_from = remap[from];
     for (const auto &t : vec)
-      out.add_transition(from, t.symbol, t.dest);
+      out.add_transition(new_from, t.symbol, remap.at(t.dest));
+  }
 
-  // connect new start and new end
-  out.add_transition(s, EPSILON, a.start);
-  out.add_transition(s, EPSILON, f);
+  // connect new start and new accept
+  out.add_transition(s, EPSILON, remap.at(a.start)); // start -> a
+  out.add_transition(s, EPSILON, f);                 // start -> accept
   for (int fa : a.accepts_set) {
-    out.add_transition(fa, EPSILON, a.start);
-    out.add_transition(fa, EPSILON, f);
+    out.add_transition(remap.at(fa), EPSILON, remap.at(a.start)); // loop back
+    out.add_transition(remap.at(fa), EPSILON, f); // end -> accept
   }
 
   out.start = s;
