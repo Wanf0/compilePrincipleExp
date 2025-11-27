@@ -1,4 +1,4 @@
-#include "../include/dfa_minimizer.h" // 新增头文件
+#include "../include/dfa_minimizer.h"
 #include "../include/nfa_to_dfa.h"
 #include "../include/thompson.h"
 #include <fstream>

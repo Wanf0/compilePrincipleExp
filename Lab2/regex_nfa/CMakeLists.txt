@@ -9,19 +9,20 @@ option(BUILD_TESTS "Build test executables" ON)
 
 include_directories(${CMAKE_SOURCE_DIR}/include)
 
-# ---- Library (core NFA + Regex + Thompson + DFA) ----
+# ---- Library (core NFA + Regex + Thompson + DFA + Left Recursion) ----
 add_library(regexnfa_lib
     src/nfa.cpp
     src/regex_parser.cpp
     src/thompson.cpp
     src/dfa.cpp
     src/nfa_to_dfa.cpp
-    src/dfa_minimizer.cpp  # 新增文件
+    src/dfa_minimizer.cpp
+    src/grammar.cpp        # <-- add your module implementation
 )
 
 target_include_directories(regexnfa_lib PUBLIC ${CMAKE_SOURCE_DIR}/include)
 
-# ---- CLI executable (normal usage) ----
+# ---- CLI executable ----
 add_executable(regex_nfa_cli src/main.cpp)
 target_link_libraries(regex_nfa_cli PRIVATE regexnfa_lib)
 
@@ -33,10 +34,13 @@ if(BUILD_TESTS)
   add_executable(NFA_TEST src/NFA_test_main.cpp)
   target_link_libraries(NFA_TEST PRIVATE regexnfa_lib)
 
-  # ---- DFA test executable ----
   add_executable(DFA_TEST src/DFA_test_main.cpp)
   target_link_libraries(DFA_TEST PRIVATE regexnfa_lib)
 
+  # ---- LEFT RECURSION TEST ----
+  add_executable(LEFT_RECURSION_TEST src/LEFT_RECURSION_test_main.cpp)
+  target_link_libraries(LEFT_RECURSION_TEST PRIVATE regexnfa_lib)
 endif()
 
 install(TARGETS regex_nfa_cli RUNTIME DESTINATION bin)
+
