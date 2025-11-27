@@ -19,7 +19,8 @@ add_library(regexnfa_lib
     src/dfa_minimizer.cpp
     src/grammar.cpp
     src/left_factor.cpp
-    src/first_follow.cpp          # <-- ★ NEW: FIRST/FOLLOW MODULE
+    src/first_follow.cpp
+    src/ll1_parser.cpp            # <-- ★ NEW: LL(1) parser module
 )
 
 target_include_directories(regexnfa_lib PUBLIC ${CMAKE_SOURCE_DIR}/include)
@@ -45,9 +46,12 @@ if(BUILD_TESTS)
   add_executable(LEFT_FACTOR_TEST src/LEFT_FACTOR_test_main.cpp)
   target_link_libraries(LEFT_FACTOR_TEST PRIVATE regexnfa_lib)
 
-  # ---- FIRST/FOLLOW TEST ----
   add_executable(FIRST_FELLOW_TEST src/FIRST_FELLOW_test_main.cpp)
   target_link_libraries(FIRST_FELLOW_TEST PRIVATE regexnfa_lib)
+
+  # ---- LL(1) PARSER TEST ----
+  add_executable(LL1_PARSER_TEST src/ll1_PARSER_test_main.cpp)
+  target_link_libraries(LL1_PARSER_TEST PRIVATE regexnfa_lib)
 endif()
 
 install(TARGETS regex_nfa_cli RUNTIME DESTINATION bin)
