@@ -9,7 +9,7 @@ option(BUILD_TESTS "Build test executables" ON)
 
 include_directories(${CMAKE_SOURCE_DIR}/include)
 
-# ---- Library (core NFA + Regex + Thompson + DFA + Left Recursion + Left Factor) ----
+# ---- Library (core NFA + Regex + Thompson + DFA + Grammar modules) ----
 add_library(regexnfa_lib
     src/nfa.cpp
     src/regex_parser.cpp
@@ -17,8 +17,9 @@ add_library(regexnfa_lib
     src/dfa.cpp
     src/nfa_to_dfa.cpp
     src/dfa_minimizer.cpp
-    src/grammar.cpp              # existing grammar / left-recursion module
-    src/left_factor.cpp          # <-- new left-factoring module
+    src/grammar.cpp
+    src/left_factor.cpp
+    src/first_follow.cpp          # <-- ★ NEW: FIRST/FOLLOW MODULE
 )
 
 target_include_directories(regexnfa_lib PUBLIC ${CMAKE_SOURCE_DIR}/include)
@@ -38,13 +39,15 @@ if(BUILD_TESTS)
   add_executable(DFA_TEST src/DFA_test_main.cpp)
   target_link_libraries(DFA_TEST PRIVATE regexnfa_lib)
 
-  # ---- LEFT RECURSION TEST ----
   add_executable(LEFT_RECURSION_TEST src/LEFT_RECURSION_test_main.cpp)
   target_link_libraries(LEFT_RECURSION_TEST PRIVATE regexnfa_lib)
 
-  # ---- LEFT FACTOR TEST ----
   add_executable(LEFT_FACTOR_TEST src/LEFT_FACTOR_test_main.cpp)
   target_link_libraries(LEFT_FACTOR_TEST PRIVATE regexnfa_lib)
+
+  # ---- FIRST/FOLLOW TEST ----
+  add_executable(FIRST_FELLOW_TEST src/FIRST_FELLOW_test_main.cpp)
+  target_link_libraries(FIRST_FELLOW_TEST PRIVATE regexnfa_lib)
 endif()
 
 install(TARGETS regex_nfa_cli RUNTIME DESTINATION bin)
