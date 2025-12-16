@@ -128,6 +128,33 @@ void testRightRecursiveExample() {
   std::cout << std::endl;
 }
 
+void testComplexNullableAndRecursive() {
+  std::cout << "=== 测试复杂可空和递归文法 ===" << std::endl;
+
+  FirstFollow calculator;
+  std::string grammarStr = "S -> M H | a\n"
+                           "H -> L S o | ε\n"
+                           "K -> d M L | ε\n"
+                           "L -> e H f\n"
+                           "M -> K | b L M";
+
+  calculator.readGrammarFromString(grammarStr);
+  calculator.setStartSymbol("S");
+
+  std::cout << "文法:" << std::endl;
+  calculator.printGrammar();
+  std::cout << std::endl;
+
+  calculator.computeFirstSets();
+  calculator.computeFollowSets();
+
+  calculator.printFirstSets();
+  std::cout << std::endl;
+  calculator.printFollowSets();
+
+  std::cout << std::endl;
+}
+
 int main() {
   std::cout << "FIRST和FOLLOW集计算算法测试程序" << std::endl;
   std::cout << "=============================" << std::endl << std::endl;
@@ -138,6 +165,7 @@ int main() {
     testNullableExample();
     testLeftRecursiveExample();
     testRightRecursiveExample();
+    testComplexNullableAndRecursive(); // 添加新的测试
 
     std::cout << "所有测试完成!" << std::endl;
   } catch (const std::exception &e) {

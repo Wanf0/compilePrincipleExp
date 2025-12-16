@@ -1,0 +1,1 @@
+/usr/bin/c++ CMakeFiles/FIRST_FELLOW_TEST.dir/src/FIRST_FELLOW_test_main.cpp.o -o FIRST_FELLOW_TEST  libregexnfa_lib.a 

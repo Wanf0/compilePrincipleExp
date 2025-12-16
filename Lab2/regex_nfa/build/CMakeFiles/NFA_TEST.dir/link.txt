@@ -1,0 +1,1 @@
+/usr/bin/c++ CMakeFiles/NFA_TEST.dir/src/NFA_test_main.cpp.o -o NFA_TEST  libregexnfa_lib.a 
