@@ -1,0 +1,13 @@
+int main() {
+    int sid;
+    sid = 23050633;
+
+    const int x = 100;
+    const int y = 50;
+    int z;
+
+    z = x + y;
+
+    return 0;
+}
+

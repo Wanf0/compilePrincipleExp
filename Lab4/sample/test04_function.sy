@@ -1,0 +1,16 @@
+int add(int x, int y) {
+    int result;
+    result = x + y;
+    return result;
+}
+
+int main() {
+    int sid;
+    sid = 23050633;
+
+    int sum;
+    sum = add(3, 4);
+
+    return 0;
+}
+
