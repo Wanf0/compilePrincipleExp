@@ -4,6 +4,6 @@ int func(int i)
 }
 int main()
 {
-func(2, 3)
+func(2, 3);
 return 0;
 }

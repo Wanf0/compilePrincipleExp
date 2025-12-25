@@ -54,6 +54,11 @@ private:
   std::unique_ptr<ASTNode> parseInitVal();
   std::unique_ptr<ASTNode> parseBType();
 
+  // 新增：函数参数解析
+  std::unique_ptr<ASTNode> parseFuncFParam();  // 单个形式参数
+  std::unique_ptr<ASTNode> parseFuncFParams(); // 形式参数列表
+  std::unique_ptr<ASTNode> parseFuncRParams(); // 实参列表
+
   // 辅助函数
   bool isUnaryOp();
   bool isMulOp();

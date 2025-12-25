@@ -267,12 +267,11 @@ std::unique_ptr<ASTNode> Parser::parseFuncDef() {
     reportSyntaxError("缺少 '('");
   }
 
-  // 解析参数（当前版本仍然不支持完整参数解析）
+  // 支持解析形式参数列表
   if (!check(TokenType::RPAREN)) {
-    // TODO: 解析函数参数（后续实验）
-    // 暂时先报错并返回 nullptr，不破坏括号结构
-    reportSyntaxError("函数参数暂不支持");
-    return nullptr;
+    auto fparams = parseFuncFParams();
+    if (fparams)
+      node->addChild(std::move(fparams));
   }
   if (!match(TokenType::RPAREN)) {
     reportSyntaxError("缺少 ')'");
@@ -625,17 +624,6 @@ std::unique_ptr<ASTNode> Parser::parsePrimaryExp() {
   }
 }
 
-// std::unique_ptr<ASTNode> Parser::parseNumber() {
-//   if (check(TokenType::INTEGER_CONST)) {
-//     auto token = getToken();
-//     auto node = std::make_unique<TerminalNode>("INTCON", token.lexeme,
-//                                                token.line, token.value);
-//     consume();
-//     return node;
-//   }
-//   reportSyntaxError("缺少数字常量");
-//   return nullptr;
-// }
 std::unique_ptr<ASTNode> Parser::parseNumber() {
   if (check(TokenType::INTEGER_CONST)) {
     auto token = getToken();
@@ -730,18 +718,9 @@ std::unique_ptr<ASTNode> Parser::parseFuncCall() {
 
   // 解析函数调用参数（支持 0 个或多个以逗号分隔的表达式）
   if (!check(TokenType::RPAREN)) {
-    while (true) {
-      auto arg = parseExp();
-      if (arg)
-        node->addChild(std::move(arg));
-
-      if (check(TokenType::COMMA)) {
-        match(TokenType::COMMA);
-        continue;
-      } else {
-        break;
-      }
-    }
+    auto rparams = parseFuncRParams();
+    if (rparams)
+      node->addChild(std::move(rparams));
   }
 
   if (!match(TokenType::RPAREN)) {
@@ -924,6 +903,72 @@ std::unique_ptr<ASTNode> Parser::parseLOrExp() {
       opNode->addChild(std::move(right));
 
     node = std::move(opNode);
+  }
+
+  return node;
+}
+
+// 新增：解析函数定义处的单个参数（BType ID）
+std::unique_ptr<ASTNode> Parser::parseFuncFParam() {
+  int startLine = currentToken.line;
+  auto node = std::make_unique<NonTerminalNode>("FuncFParam", startLine);
+
+  // BType
+  auto btype = parseBType();
+  if (btype)
+    node->addChild(std::move(btype));
+
+  if (!check(TokenType::IDENTIFIER)) {
+    reportSyntaxError("缺少参数名");
+    return nullptr;
+  }
+  Token idTok = getToken();
+  consume();
+  auto idNode = std::make_unique<TerminalNode>("ID", idTok.lexeme, idTok.line);
+  node->addChild(std::move(idNode));
+
+  return node;
+}
+
+// 新增：解析函数定义处的参数列表
+std::unique_ptr<ASTNode> Parser::parseFuncFParams() {
+  int startLine = currentToken.line;
+  auto node = std::make_unique<NonTerminalNode>("FuncFParams", startLine);
+
+  auto first = parseFuncFParam();
+  if (!first)
+    return node;
+  node->addChild(std::move(first));
+
+  while (check(TokenType::COMMA)) {
+    match(TokenType::COMMA);
+    auto p = parseFuncFParam();
+    if (p)
+      node->addChild(std::move(p));
+    else
+      break;
+  }
+
+  return node;
+}
+
+// 新增：解析函数调用处的实参列表 (Exp {, Exp})
+std::unique_ptr<ASTNode> Parser::parseFuncRParams() {
+  int startLine = currentToken.line;
+  auto node = std::make_unique<NonTerminalNode>("FuncRParams", startLine);
+
+  auto firstArg = parseExp();
+  if (!firstArg)
+    return node;
+  node->addChild(std::move(firstArg));
+
+  while (check(TokenType::COMMA)) {
+    match(TokenType::COMMA);
+    auto arg = parseExp();
+    if (arg)
+      node->addChild(std::move(arg));
+    else
+      break;
   }
 
   return node;

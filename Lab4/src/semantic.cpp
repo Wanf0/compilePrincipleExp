@@ -378,11 +378,45 @@ void SemanticAnalyzer::visitFuncDef(const std::unique_ptr<ASTNode> &node) {
     return;
   }
 
+  // 提取形式参数信息并填充 funcSym->paramTypes（若有）
+  for (const auto &c : children) {
+    if (c->getName() == "FuncFParams") {
+      for (const auto &fp : c->getChildren()) {
+        // fp: FuncFParam -> [BType, ID]
+        VarType ptype = VarType::UNKNOWN;
+        if (!fp->getChildren().empty()) {
+          if (fp->getChildren()[0]->getName() == "BType")
+            ptype = getVarTypeFromBType(fp->getChildren()[0]);
+        }
+        if (ptype == VarType::UNKNOWN)
+          ptype = VarType::INT;
+        funcSym->paramTypes.push_back(ptype);
+      }
+    }
+  }
+
   // 设置当前函数
   currentFunc = funcSym;
 
-  // 进入函数体作用域
+  // 进入函数体作用域并把形参作为局部变量声明
   enterScope();
+  for (const auto &c : children) {
+    if (c->getName() == "FuncFParams") {
+      size_t pi = 0;
+      for (const auto &fp : c->getChildren()) {
+        std::string pname;
+        int pline = fp->getLine();
+        if (findFirstID(fp, pname, pline)) {
+          VarType ptype = VarType::INT;
+          if (pi < funcSym->paramTypes.size())
+            ptype = funcSym->paramTypes[pi];
+          auto paramSym = std::make_shared<VarSymbol>(pname, pline, ptype);
+          declareSymbol(paramSym);
+          ++pi;
+        }
+      }
+    }
+  }
 
   // 遍历函数体（寻找 Block 节点）
   for (const auto &c : children) {
@@ -574,7 +608,41 @@ void SemanticAnalyzer::visitFuncCall(const std::unique_ptr<ASTNode> &node) {
     return;
   }
 
-  // TODO: 参数数量/类型检查 (Error type 9)
+  // 参数检查（Error type 9）
+  auto funcSym = std::dynamic_pointer_cast<FuncSymbol>(symbol);
+  if (!funcSym)
+    return;
+
+  // 收集实际参数类型
+  std::vector<VarType> actualTypes;
+  size_t actualCount = 0;
+  for (const auto &c : node->getChildren()) {
+    if (c->getName() == "FuncRParams") {
+      for (const auto &arg : c->getChildren()) {
+        ++actualCount;
+        actualTypes.push_back(getTypeFromAST(arg));
+      }
+    }
+  }
+
+  // 参数个数检查
+  if (actualCount != funcSym->paramTypes.size()) {
+    reportError(9, line,
+                "function '" + funcName +
+                    "' called with wrong number of arguments");
+    return;
+  }
+
+  // 参数类型逐一检查
+  for (size_t i = 0; i < actualCount; ++i) {
+    VarType expected = funcSym->paramTypes[i];
+    VarType actual = actualTypes[i];
+    if (!typeCompatible(expected, actual)) {
+      reportError(9, line,
+                  "function '" + funcName + "' argument type mismatch");
+      return;
+    }
+  }
 }
 
 void SemanticAnalyzer::visitAssignStmt(const std::unique_ptr<ASTNode> &node) {
