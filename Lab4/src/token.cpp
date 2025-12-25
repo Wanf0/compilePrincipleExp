@@ -6,6 +6,7 @@ std::string tokenTypeToString(TokenType type) {
       // 关键字
       {TokenType::INT, "INTTK"},
       {TokenType::VOID, "VOIDTK"},
+      {TokenType::FLOAT, "FLOATTK"},
       {TokenType::RETURN, "RETURNTK"},
       {TokenType::IF, "IFTK"},
       {TokenType::ELSE, "ELSETK"},

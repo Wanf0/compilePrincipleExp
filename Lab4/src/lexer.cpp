@@ -5,10 +5,15 @@
 
 // 关键字映射表
 static const std::unordered_map<std::string, TokenType> KEYWORDS = {
-    {"int", TokenType::INT},       {"void", TokenType::VOID},
-    {"return", TokenType::RETURN}, {"if", TokenType::IF},
-    {"else", TokenType::ELSE},     {"while", TokenType::WHILE},
-    {"break", TokenType::BREAK},   {"continue", TokenType::CONTINUE},
+    {"int", TokenType::INT},
+    {"void", TokenType::VOID},
+    {"float", TokenType::FLOAT},
+    {"return", TokenType::RETURN},
+    {"if", TokenType::IF},
+    {"else", TokenType::ELSE},
+    {"while", TokenType::WHILE},
+    {"break", TokenType::BREAK},
+    {"continue", TokenType::CONTINUE},
     {"const", TokenType::CONST}};
 
 // 运算符映射表

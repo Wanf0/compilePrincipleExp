@@ -84,12 +84,14 @@ std::unique_ptr<ASTNode> Parser::parseCompUnit() {
   auto node = std::make_unique<NonTerminalNode>("CompUnit", startLine);
 
   // CompUnit → {Decl} {FuncDef} MainFuncDef
+  // 支持 INT / VOID / CONST 开头的声明或函数定义
   while (true) {
-    // 检查是否是声明或函数定义
-    if (check(TokenType::CONST) || check(TokenType::INT)) {
+    if (check(TokenType::CONST) || check(TokenType::INT) ||
+        check(TokenType::VOID)) {
       // 可能是声明或函数定义
+      // 判断是否是函数定义：下下个 token 是否为 '('
       if (peek() == TokenType::LPAREN ||
-          (peek() == TokenType::IDENTIFIER &&
+          (peek() == TokenType::IDENTIFIER && tokenIndex + 2 < tokens.size() &&
            tokens[tokenIndex + 2].type == TokenType::LPAREN)) {
         // 函数定义
         auto funcDef = parseFuncDef();
@@ -133,9 +135,34 @@ std::unique_ptr<ASTNode> Parser::parseConstDecl() {
   if (btype)
     node->addChild(std::move(btype));
 
-  // 这里简化处理，直接跳过常量定义
-  while (!check(TokenType::SEMICOLON) && !check(TokenType::END_OF_FILE)) {
+  // 这里简化处理：解析至少一个 ConstDef（我们只取标识符和可选初始化）
+  bool first = true;
+  while (true) {
+    if (!first) {
+      if (!match(TokenType::COMMA))
+        break;
+    }
+    first = false;
+
+    if (!check(TokenType::IDENTIFIER)) {
+      reportSyntaxError("缺少常量名");
+      // 同步到分号并返回
+      while (!check(TokenType::SEMICOLON) && !check(TokenType::END_OF_FILE))
+        consume();
+      break;
+    }
+    Token idTok = getToken();
     consume();
+    auto idNode =
+        std::make_unique<TerminalNode>("ID", idTok.lexeme, idTok.line);
+    node->addChild(std::move(idNode));
+
+    if (check(TokenType::ASSIGN)) {
+      match(TokenType::ASSIGN);
+      auto init = parseExp();
+      if (init)
+        node->addChild(std::move(init));
+    }
   }
 
   if (!match(TokenType::SEMICOLON)) {
@@ -154,9 +181,49 @@ std::unique_ptr<ASTNode> Parser::parseVarDecl() {
   if (btype)
     node->addChild(std::move(btype));
 
-  // 这里简化处理，直接跳过后面的变量定义
-  while (!check(TokenType::SEMICOLON) && !check(TokenType::END_OF_FILE)) {
+  // 解析至少一个 VarDef（至少要有标识符）
+  bool first = true;
+  while (true) {
+    if (!first) {
+      if (!match(TokenType::COMMA))
+        break;
+    }
+    first = false;
+
+    if (!check(TokenType::IDENTIFIER)) {
+      reportSyntaxError("缺少变量名");
+      // 同步到分号并返回
+      while (!check(TokenType::SEMICOLON) && !check(TokenType::END_OF_FILE))
+        consume();
+      break;
+    }
+
+    // 读取变量名（在 consume 前保存）
+    Token idTok = getToken();
     consume();
+    auto idNode =
+        std::make_unique<TerminalNode>("ID", idTok.lexeme, idTok.line);
+    node->addChild(std::move(idNode));
+
+    // 可选数组维度（简单处理：保存表达式作为子节点）
+    while (check(TokenType::LBRACKET)) {
+      match(TokenType::LBRACKET);
+      auto idxExp = parseExp();
+      if (idxExp)
+        node->addChild(std::move(idxExp));
+      if (!match(TokenType::RBRACKET)) {
+        reportSyntaxError("缺少 ']'");
+        break;
+      }
+    }
+
+    // 可选初始化
+    if (check(TokenType::ASSIGN)) {
+      match(TokenType::ASSIGN);
+      auto init = parseExp();
+      if (init)
+        node->addChild(std::move(init));
+    }
   }
 
   if (!match(TokenType::SEMICOLON)) {
@@ -175,30 +242,26 @@ std::unique_ptr<ASTNode> Parser::parseFuncDef() {
   if (funcType)
     node->addChild(std::move(funcType));
 
-  if (!match(TokenType::IDENTIFIER)) {
+  // 识别并保存函数名 token（在 consume 之前）
+  if (!check(TokenType::IDENTIFIER)) {
     reportSyntaxError("缺少函数名");
     return nullptr;
   }
-
-  // 添加函数名节点
-  auto funcName = std::make_unique<TerminalNode>("ID", currentToken.lexeme,
-                                                 currentToken.line);
+  Token idToken = getToken();
+  consume();
+  // 添加函数名节点（使用保存的 token）
+  auto funcName =
+      std::make_unique<TerminalNode>("ID", idToken.lexeme, idToken.line);
   node->addChild(std::move(funcName));
 
   if (!match(TokenType::LPAREN)) {
     reportSyntaxError("缺少 '('");
   }
 
-  // 跳过参数
-  // while (!check(TokenType::RPAREN) && !check(TokenType::END_OF_FILE)) {
-  //   consume();
-  // }
-  //
-  // 不再跳过参数，而是解析参数列表（如果没有参数，直接匹配右括号）
-  // 对于空参数列表，直接匹配右括号
+  // 解析参数（当前版本仍然不支持完整参数解析）
   if (!check(TokenType::RPAREN)) {
     // TODO: 解析函数参数（后续实验）
-    // 暂时先跳过，但不破坏括号结构
+    // 暂时先报错并返回 nullptr，不破坏括号结构
     reportSyntaxError("函数参数暂不支持");
     return nullptr;
   }
@@ -212,7 +275,7 @@ std::unique_ptr<ASTNode> Parser::parseFuncDef() {
 
   return node;
 }
-
+// parseFuncType 示例片段：替换原来的 parseFuncType 函数
 std::unique_ptr<ASTNode> Parser::parseFuncType() {
   int startLine = currentToken.line;
   auto node = std::make_unique<NonTerminalNode>("FuncType", startLine);
@@ -229,6 +292,12 @@ std::unique_ptr<ASTNode> Parser::parseFuncType() {
                                                    voidToken.line);
     node->addChild(std::move(voidNode));
     consume();
+  } else if (check(TokenType::FLOAT)) {
+    auto floatToken = getToken();
+    auto floatNode = std::make_unique<TerminalNode>(
+        "FLOATTK", floatToken.lexeme, floatToken.line);
+    node->addChild(std::move(floatNode));
+    consume();
   } else {
     reportSyntaxError("缺少函数返回类型");
   }
@@ -236,6 +305,7 @@ std::unique_ptr<ASTNode> Parser::parseFuncType() {
   return node;
 }
 
+// parseBType 示例片段：替换原来的 parseBType 函数
 std::unique_ptr<ASTNode> Parser::parseBType() {
   int startLine = currentToken.line;
   auto node = std::make_unique<NonTerminalNode>("BType", startLine);
@@ -245,6 +315,12 @@ std::unique_ptr<ASTNode> Parser::parseBType() {
     auto intNode =
         std::make_unique<TerminalNode>("INTTK", intToken.lexeme, intToken.line);
     node->addChild(std::move(intNode));
+    consume();
+  } else if (check(TokenType::FLOAT)) {
+    auto floatToken = getToken();
+    auto floatNode = std::make_unique<TerminalNode>(
+        "FLOATTK", floatToken.lexeme, floatToken.line);
+    node->addChild(std::move(floatNode));
     consume();
   } else {
     reportSyntaxError("缺少类型说明");
@@ -280,11 +356,11 @@ std::unique_ptr<ASTNode> Parser::parseBlockItem() {
   int startLine = currentToken.line;
 
   // BlockItem → Decl | Stmt
-  if (check(TokenType::CONST) || check(TokenType::INT)) {
-    // 可能是声明
-    // 简化处理：如果是声明但后面有 '('，则是函数调用表达式
+  if (check(TokenType::CONST) || check(TokenType::INT) ||
+      check(TokenType::VOID)) {
+    // 可能是声明或函数调用表达式
     if (peek() == TokenType::LPAREN ||
-        (peek() == TokenType::IDENTIFIER &&
+        (peek() == TokenType::IDENTIFIER && tokenIndex + 2 < tokens.size() &&
          tokens[tokenIndex + 2].type == TokenType::LPAREN)) {
       // 函数调用表达式语句
       return parseStmt();
@@ -454,13 +530,8 @@ std::unique_ptr<ASTNode> Parser::parseExp() {
   return parseLOrExp();
 }
 
-// std::unique_ptr<ASTNode> Parser::parseCond() {
-//   // Cond → LOrExp
-//   return parseLOrExp();
-// }
 std::unique_ptr<ASTNode> Parser::parseCond() {
 // Cond → LOrExp
-// 添加调试信息以便跟踪
 #ifdef DEBUG
   std::cout << "DEBUG parseCond: 开始解析条件表达式，当前token: "
             << tokenTypeToString(currentToken.type) << " '"
@@ -482,14 +553,18 @@ std::unique_ptr<ASTNode> Parser::parseLVal() {
   int startLine = currentToken.line;
   auto node = std::make_unique<NonTerminalNode>("LVal", startLine);
 
-  if (!match(TokenType::IDENTIFIER)) {
+  if (!check(TokenType::IDENTIFIER)) {
     reportSyntaxError("缺少标识符");
     return nullptr;
   }
 
-  // 添加标识符节点
-  auto idNode = std::make_unique<TerminalNode>("ID", currentToken.lexeme,
-                                               currentToken.line);
+  // 在消费前保存 identifier token
+  Token idToken = getToken();
+  consume();
+
+  // 添加标识符节点（使用保存的 token）
+  auto idNode =
+      std::make_unique<TerminalNode>("ID", idToken.lexeme, idToken.line);
   node->addChild(std::move(idNode));
 
   // 检查是否有数组访问
@@ -507,34 +582,8 @@ std::unique_ptr<ASTNode> Parser::parseLVal() {
   return node;
 }
 
-// std::unique_ptr<ASTNode> Parser::parsePrimaryExp() {
-//   int startLine = currentToken.line;
-//
-//   if (check(TokenType::LPAREN)) {
-//     // '(' Exp ')'
-//     match(TokenType::LPAREN);
-//     auto exp = parseLOrExp();
-//     if (!match(TokenType::RPAREN)) {
-//       reportSyntaxError("缺少 ')'");
-//     }
-//     return exp;
-//   } else if (check(TokenType::IDENTIFIER) && peek() == TokenType::LPAREN) {
-//     // 函数调用
-//     return parseFuncCall();
-//   } else if (check(TokenType::IDENTIFIER)) {
-//     // LVal
-//     return parseLVal();
-//   } else {
-//     // Number
-//     return parseNumber();
-//   }
-// }
-
 std::unique_ptr<ASTNode> Parser::parsePrimaryExp() {
-  // int startLine = currentToken.line;
-
   if (check(TokenType::LPAREN)) {
-    // '(' LOrExp ')'
     match(TokenType::LPAREN);
 
 #ifdef DEBUG
@@ -553,7 +602,6 @@ std::unique_ptr<ASTNode> Parser::parsePrimaryExp() {
 
     if (!match(TokenType::RPAREN)) {
       reportSyntaxError("缺少 ')'");
-      // 注意：这里不要使用 syncTo，应该让调用者处理错误恢复
     }
 
     return exp;
@@ -637,32 +685,40 @@ std::unique_ptr<ASTNode> Parser::parseFuncCall() {
   int startLine = currentToken.line;
   auto node = std::make_unique<NonTerminalNode>("FuncCall", startLine);
 
-  if (!match(TokenType::IDENTIFIER)) {
+  if (!check(TokenType::IDENTIFIER)) {
     reportSyntaxError("缺少函数名");
     return nullptr;
   }
 
+  // 在消费之前保存函数名 token
+  Token idToken = getToken();
+  consume();
+
   // 添加函数名
-  auto funcName = std::make_unique<TerminalNode>("ID", currentToken.lexeme,
-                                                 currentToken.line);
+  auto funcName =
+      std::make_unique<TerminalNode>("ID", idToken.lexeme, idToken.line);
   node->addChild(std::move(funcName));
 
   if (!match(TokenType::LPAREN)) {
     reportSyntaxError("缺少 '('");
   }
 
-  // 跳过参数
-  // while (!check(TokenType::RPAREN) && !check(TokenType::END_OF_FILE)) {
-  //   consume();
-  // }
-  //
-  // 解析函数调用参数
+  // 解析函数调用参数（支持 0 个或多个以逗号分隔的表达式）
   if (!check(TokenType::RPAREN)) {
-    // TODO: 解析函数调用参数（后续实验）
-    // 暂时先跳过，但不破坏括号结构
-    reportSyntaxError("函数调用参数暂不支持");
-    return nullptr;
+    while (true) {
+      auto arg = parseExp();
+      if (arg)
+        node->addChild(std::move(arg));
+
+      if (check(TokenType::COMMA)) {
+        match(TokenType::COMMA);
+        continue;
+      } else {
+        break;
+      }
+    }
   }
+
   if (!match(TokenType::RPAREN)) {
     reportSyntaxError("缺少 ')'");
   }

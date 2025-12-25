@@ -6,10 +6,11 @@
 #include <stack>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 // 类型枚举
-enum class VarType { INT, INT_ARRAY, VOID, UNKNOWN };
+enum class VarType { INT, FLOAT, INT_ARRAY, VOID, UNKNOWN };
 
 // 符号信息基类
 class Symbol {
@@ -63,6 +64,10 @@ private:
   std::shared_ptr<FuncSymbol> currentFunc;
   bool inLoop; // 是否在循环体内
   bool hasMain;
+
+  // 语义错误统计与去重
+  int errorCount;
+  std::unordered_set<std::string> reportedErrors; // key: type:line
 
   // 错误报告
   void reportError(int type, int line, const std::string &msg);

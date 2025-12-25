@@ -8,6 +8,7 @@ enum class TokenType {
   // 关键字
   INT,
   VOID,
+  FLOAT,
   RETURN,
   IF,
   ELSE,
