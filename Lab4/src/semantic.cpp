@@ -98,13 +98,12 @@ SemanticAnalyzer::lookupSymbol(const std::string &name) {
   return nullptr;
 }
 
-// ==================== 类型兼容性检查（实现补充） ====================
+// ==================== 类型兼容性检查 ====================
 
 bool SemanticAnalyzer::typeCompatible(VarType t1, VarType t2) {
   // 精简规则：只有完全相同类型才视为兼容（INT 与 FLOAT 不互转）
   if (t1 == t2)
     return true;
-  // INT 和 INT_ARRAY 在这里不兼容
   return false;
 }
 
@@ -147,7 +146,8 @@ static VarType getVarTypeFromBType(const std::unique_ptr<ASTNode> &btypeNode) {
   return VarType::UNKNOWN;
 }
 
-// 递归计算表达式类型，如果发生运算类型不匹配，会报告 Error type 11
+// ==================== 类型推导（表达式） ====================
+
 VarType SemanticAnalyzer::getTypeFromAST(const std::unique_ptr<ASTNode> &node) {
   if (!node)
     return VarType::UNKNOWN;
@@ -158,16 +158,16 @@ VarType SemanticAnalyzer::getTypeFromAST(const std::unique_ptr<ASTNode> &node) {
     const std::string &n = t->getName();
     if (n == "INTCON") {
       return VarType::INT;
+    } else if (n == "FLOATCON") {
+      return VarType::FLOAT;
     } else if (n == "ID") {
       auto sym = lookupSymbol(t->getLexeme());
       if (!sym) {
         // 未声明的变量已在 visitLVal 中报告；返回 UNKNOWN 以避免连锁错误
         return VarType::UNKNOWN;
       }
-      // 若标识符是函数名而作为表达式出现，若函数有返回类型则返回
       return sym->type;
     } else {
-      // 运算符等终结符不单独作为类型
       return VarType::UNKNOWN;
     }
   }
@@ -190,7 +190,7 @@ VarType SemanticAnalyzer::getTypeFromAST(const std::unique_ptr<ASTNode> &node) {
     return VarType::UNKNOWN;
   }
 
-  // 一元运算：只检查子节点
+  // 一元运算：只检查子节点（取最后一个子节点类型）
   if (nm == "UnaryExp" || nm == "UnaryOp") {
     if (!node->getChildren().empty()) {
       VarType sub = getTypeFromAST(node->getChildren().back());
@@ -199,26 +199,21 @@ VarType SemanticAnalyzer::getTypeFromAST(const std::unique_ptr<ASTNode> &node) {
     return VarType::UNKNOWN;
   }
 
-  // 二元表达式：BinaryExp / RelExp / EqExp / LAndExp / LOrExp / MulExp / AddExp
-  // 约定：二元节点的结构通常为 [left, opTerminal, right] 或更复杂的嵌套形式
+  // 二元表达式：一般模式 [left, op, right]
   if (nm == "BinaryExp" || nm == "RelExp" || nm == "EqExp" || nm == "LAndExp" ||
-      nm == "LOrExp" || nm == "AddExp" || nm == "MulExp" || nm == "RelExp" ||
-      nm == "EqExp") {
+      nm == "LOrExp" || nm == "AddExp" || nm == "MulExp") {
     const auto &children = node->getChildren();
     if (children.size() >= 3) {
       VarType left = getTypeFromAST(children[0]);
-      // operator may be children[1] (TerminalNode)
       const ASTNode *opNode = children[1].get();
       const TerminalNode *opT = dynamic_cast<const TerminalNode *>(opNode);
       VarType right = getTypeFromAST(children[2]);
 
-      // 如果任一子表达式类型未知，难以进一步判断
+      // 若任一子表达式未知则无法判定类型
       if (left == VarType::UNKNOWN || right == VarType::UNKNOWN) {
         return VarType::UNKNOWN;
       }
 
-      // 对于算术运算 + - * / % 要求两个操作数为 INT（本实验中视 INT 与 FLOAT
-      // 不可混合）
       std::string opname = opT ? opT->getName() : "";
       bool isArithmetic =
           (opname == "PLUS" || opname == "MINUS" || opname == "MULTIPLY" ||
@@ -229,19 +224,19 @@ VarType SemanticAnalyzer::getTypeFromAST(const std::unique_ptr<ASTNode> &node) {
       bool isLogical = (opname == "AND" || opname == "OR" || opname == "NOT");
 
       if (isArithmetic || isRelational || isEquality || isLogical) {
-        // 对这些操作符，要求两边类型相同并且为 INT（当前实验规则）
+        // 本实验简化规则：要求两边类型相同且为 INT（不支持隐式转换）
         if (left != right || left != VarType::INT) {
           int errLine = (opT ? opT->getLine() : node->getLine());
           reportError(11, errLine, "type mismatched for operands");
           return VarType::UNKNOWN;
         }
-        // 算术运算和关系运算结果为 INT（简化）
+        // 结果类型简化为 INT
         return VarType::INT;
       }
     }
   }
 
-  // 普通节点：尝试递归返回第一个非空子节点类型
+  // 递归尝试从子节点推断类型（取第一个有效子类型）
   for (const auto &c : node->getChildren()) {
     VarType tsub = getTypeFromAST(c);
     if (tsub != VarType::UNKNOWN)
@@ -271,14 +266,13 @@ void SemanticAnalyzer::visitCompUnit(const std::unique_ptr<ASTNode> &node) {
     }
   }
 
-  // 检查 main 函数是否存在（如果不存在，报告错误 type 3）
+  // 检查 main 函数是否存在（若不存在，报告 error type 3）
   if (!hasMain) {
     reportError(3, 1, "missing main function");
   }
 }
 
 void SemanticAnalyzer::visitDecl(const std::unique_ptr<ASTNode> &node) {
-  // VarDecl 的子节点结构：BType, VarDef...
   if (!node)
     return;
   const auto &children = node->getChildren();
@@ -291,24 +285,55 @@ void SemanticAnalyzer::visitDecl(const std::unique_ptr<ASTNode> &node) {
     declaredType = getVarTypeFromBType(children[0]);
   }
 
-  // 在 VarDecl 中找到所有 ID 并声明变量（支持多个逗号分隔的 VarDef）
-  for (size_t i = 1; i < children.size(); ++i) {
-    std::string varName;
-    int line = children[i]->getLine();
-    // 若节点本身是 Terminal ID
-    const TerminalNode *tn =
-        dynamic_cast<const TerminalNode *>(children[i].get());
-    if (tn && tn->getName() == "ID") {
-      varName = tn->getLexeme();
-      line = tn->getLine();
+  // 从第二个子节点开始，每个 VarDef 节点代表一个变量定义
+  for (size_t idx = 1; idx < children.size(); ++idx) {
+    const auto &child = children[idx];
+    if (child->getName() == "VarDef") {
+      // VarDef 内结构： ID, {Index...}, [InitVal]
+      const auto &vchildren = child->getChildren();
+      if (vchildren.empty())
+        continue;
+      // ID 应该是第一个子节点
+      const TerminalNode *idn =
+          dynamic_cast<const TerminalNode *>(vchildren[0].get());
+      std::string varName;
+      int varLine = child->getLine();
+      if (idn && idn->getName() == "ID") {
+        varName = idn->getLexeme();
+        varLine = idn->getLine();
+      } else {
+        // 防御性查找
+        findFirstID(child, varName, varLine);
+      }
+      if (varName.empty())
+        continue;
+
+      // 判断是否有 Index 节点以标记数组
+      bool isArray = false;
+      for (size_t k = 1; k < vchildren.size(); ++k) {
+        if (vchildren[k]->getName() == "Index") {
+          isArray = true;
+          break;
+        }
+      }
+
+      VarType symType = declaredType;
+      if (isArray) {
+        symType = VarType::INT_ARRAY; // 本实验仅支持 int 数组元素类型
+      }
+
+      auto varSym = std::make_shared<VarSymbol>(varName, varLine, symType);
+      declareSymbol(varSym);
     } else {
-      // 否则在子树里查找第一个ID
-      findFirstID(children[i], varName, line);
+      // 兼容之前老结构：若不是 VarDef，尝试按旧逻辑处理（兼容性）
+      std::string varName;
+      int varLine = children[idx]->getLine();
+      if (!findFirstID(children[idx], varName, varLine))
+        continue;
+      VarType symType = declaredType;
+      auto varSym = std::make_shared<VarSymbol>(varName, varLine, symType);
+      declareSymbol(varSym);
     }
-    if (varName.empty())
-      continue;
-    auto varSym = std::make_shared<VarSymbol>(varName, line, declaredType);
-    declareSymbol(varSym);
   }
 }
 
@@ -384,7 +409,6 @@ void SemanticAnalyzer::visitBlock(const std::unique_ptr<ASTNode> &node) {
                nm == "Block") {
       visitStmt(child);
     } else {
-      // 递归其它（防御性处理）
       visitStmt(child);
     }
   }
@@ -417,7 +441,6 @@ void SemanticAnalyzer::visitStmt(const std::unique_ptr<ASTNode> &node) {
   } else if (stmtType == "ExpStmt") {
     visitExp(node);
   } else {
-    // 一般节点递归检查其子节点
     visitExp(node);
   }
 }
@@ -449,10 +472,21 @@ void SemanticAnalyzer::visitLVal(const std::unique_ptr<ASTNode> &node) {
   if (!node)
     return;
 
-  std::string varName;
-  int line = node->getLine();
-  if (!findFirstID(node, varName, line)) {
+  const auto &children = node->getChildren();
+  if (children.empty())
     return;
+
+  // 第一个子节点应该是标识符
+  std::string varName;
+  int line = children[0]->getLine();
+  const TerminalNode *idNode =
+      dynamic_cast<const TerminalNode *>(children[0].get());
+  if (idNode && idNode->getName() == "ID") {
+    varName = idNode->getLexeme();
+    line = idNode->getLine();
+  } else {
+    if (!findFirstID(node, varName, line))
+      return;
   }
 
   // 查找符号
@@ -468,14 +502,51 @@ void SemanticAnalyzer::visitLVal(const std::unique_ptr<ASTNode> &node) {
     return;
   }
 
-  // 如果有数组下标访问，简单检查符号类型是否为数组
-  const auto &children = node->getChildren();
+  // 如果有数组下标访问，先检查下标类型（优先报 type 7），再检查是否为数组（type
+  // 8）
   if (children.size() > 1) {
-    if (symbol->type != VarType::INT_ARRAY) {
-      reportError(8, line, "subscripted non-array \"" + varName + "\"");
-      return;
+    // children[1..] 是下标表达式（在 parseLVal 中构造）
+    for (size_t idx = 1; idx < children.size(); ++idx) {
+      VarType idxType = getTypeFromAST(children[idx]);
+      // 发现非整数下标 -> 报 type 7
+      if (idxType != VarType::INT) {
+        // 若是浮点字面量，尽量打印原始文本
+        const TerminalNode *tn =
+            dynamic_cast<const TerminalNode *>(children[idx].get());
+        if (tn && tn->getName() == "FLOATCON") {
+          reportError(7, tn->getLine(),
+                      "\"" + tn->getLexeme() + "\" is not an integer");
+        } else if (tn && tn->getName() == "ID") {
+          auto s = lookupSymbol(tn->getLexeme());
+          if (s && s->type == VarType::FLOAT) {
+            reportError(7, tn->getLine(),
+                        "\"" + tn->getLexeme() + "\" is not an integer");
+          } else {
+            reportError(7, children[idx]->getLine(),
+                        "array subscript is not integer");
+          }
+        } else {
+          reportError(7, children[idx]->getLine(),
+                      "array subscript is not integer");
+        }
+        // 继续检查下一个下标（reportError 会去重）
+      }
     }
-    // TODO: 对下标表达式类型进行检查（是否为整型）
+
+    // 检查是否为数组类型
+    if (symbol->type != VarType::INT_ARRAY) {
+      // 只有在下标都为整数的情况下才把非数组访问报为 type 8 以避免覆盖 type 7
+      bool anyNonInt = false;
+      for (size_t idx = 1; idx < children.size(); ++idx) {
+        if (getTypeFromAST(children[idx]) != VarType::INT) {
+          anyNonInt = true;
+          break;
+        }
+      }
+      if (!anyNonInt) {
+        reportError(8, line, "subscripted non-array \"" + varName + "\"");
+      }
+    }
   }
 }
 
@@ -509,7 +580,7 @@ void SemanticAnalyzer::visitFuncCall(const std::unique_ptr<ASTNode> &node) {
 void SemanticAnalyzer::visitAssignStmt(const std::unique_ptr<ASTNode> &node) {
   const auto &children = node->getChildren();
   if (children.size() >= 2) {
-    // 检查左值
+    // 检查左值（会报告未声明等）
     if (children[0]->getName() == "LVal") {
       visitLVal(children[0]);
     }
@@ -518,16 +589,41 @@ void SemanticAnalyzer::visitAssignStmt(const std::unique_ptr<ASTNode> &node) {
     if (children.size() > 1) {
       // 触发类型推导，若类型不匹配可在此处扩展检查
       VarType rhs = getTypeFromAST(children[1]);
-      // 若左是ID可进一步检查赋值类型一致性
+
+      // 若左是 ID，可进一步检查赋值类型一致性
       std::string leftName;
       int leftLine = children[0]->getLine();
       if (findFirstID(children[0], leftName, leftLine)) {
         auto sym = lookupSymbol(leftName);
-        if (sym && !sym->isFunc && rhs != VarType::UNKNOWN &&
-            sym->type != rhs) {
-          reportError(11, node->getLine(), "type mismatched for operands");
+        // 如果左值未声明（sym ==
+        // nullptr），不要再做赋值类型检查，避免重复错误（type1 已报告）
+        if (sym && !sym->isFunc && rhs != VarType::UNKNOWN) {
+          // 计算左值目标类型（如果是数组类型，则目标为元素类型）
+          VarType leftTargetType = sym->type;
+          if (sym->type == VarType::INT_ARRAY) {
+            leftTargetType = VarType::INT;
+          }
+
+          // 检查左值是否含有非整数下标（若有，下标错误已报，跳过赋值类型报错以免重复）
+          bool leftHasNonIntSubscript = false;
+          if (children[0]->getName() == "LVal") {
+            const auto &lchildren = children[0]->getChildren();
+            if (lchildren.size() > 1) {
+              for (size_t k = 1; k < lchildren.size(); ++k) {
+                if (getTypeFromAST(lchildren[k]) != VarType::INT) {
+                  leftHasNonIntSubscript = true;
+                  break;
+                }
+              }
+            }
+          }
+
+          if (!leftHasNonIntSubscript && leftTargetType != rhs) {
+            reportError(11, node->getLine(), "type mismatched for operands");
+          }
         }
       }
+
       visitExp(children[1]);
     }
   }
@@ -603,7 +699,6 @@ void SemanticAnalyzer::check(const std::unique_ptr<ASTNode> &ast) {
   if (ast->getName() == "CompUnit") {
     visitCompUnit(ast);
   } else {
-    // 如果传入的不是 CompUnit 就尝试从根节点递归查找
     visitCompUnit(ast);
   }
 }

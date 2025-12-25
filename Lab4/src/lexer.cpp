@@ -147,80 +147,175 @@ Token Lexer::recognizeKeywordOrIdentifier() {
   return Token(type, lexeme, startLine);
 }
 
+// Token Lexer::recognizeNumber() {
+//   int startLine = currentLine;
+//   std::string lexeme;
+//
+//   // 处理0的情况
+//   if (currentChar == '0') {
+//     lexeme += currentChar;
+//     advance();
+//
+//     // 十六进制
+//     if (currentChar == 'x' || currentChar == 'X') {
+//       lexeme += currentChar;
+//       advance();
+//
+//       bool hasDigit = false;
+//       while (!eofReached && std::isxdigit(currentChar)) {
+//         hasDigit = true;
+//         lexeme += currentChar;
+//
+//         // 检查非法十六进制字符
+//         if (!(std::isdigit(currentChar) ||
+//               (currentChar >= 'a' && currentChar <= 'f') ||
+//               (currentChar >= 'A' && currentChar <= 'F'))) {
+//           ErrorHandler::reportLexicalError(startLine,
+//                                            "非法十六进制数: '" + lexeme +
+//                                            "'");
+//           return Token(TokenType::ERROR, lexeme, startLine);
+//         }
+//         advance();
+//       }
+//
+//       if (!hasDigit) {
+//         ErrorHandler::reportLexicalError(startLine, "十六进制数缺少数字: '" +
+//                                                         lexeme + "'");
+//         return Token(TokenType::ERROR, lexeme, startLine);
+//       }
+//
+//       // 转换十六进制数为十进制
+//       int value = std::stoi(lexeme.substr(2), nullptr, 16);
+//       return Token(TokenType::INTEGER_CONST, lexeme, startLine, value);
+//     }
+//     // 八进制或0
+//     else {
+//       bool isOctal = false;
+//       while (!eofReached && std::isdigit(currentChar)) {
+//         if (currentChar >= '8') {
+//           ErrorHandler::reportLexicalError(
+//               startLine, "非法八进制数: '" + lexeme + currentChar + "'");
+//           return Token(TokenType::ERROR, lexeme, startLine);
+//         }
+//         isOctal = true;
+//         lexeme += currentChar;
+//         advance();
+//       }
+//       (void)isOctal; // 避免未使用变量警告
+//
+//       if (lexeme == "0") {
+//         return Token(TokenType::INTEGER_CONST, lexeme, startLine, 0);
+//       }
+//
+//       // 转换八进制数为十进制
+//       int value = std::stoi(lexeme, nullptr, 8);
+//       return Token(TokenType::INTEGER_CONST, lexeme, startLine, value);
+//     }
+//   }
+//   // 十进制
+//   else {
+//     while (!eofReached && std::isdigit(currentChar)) {
+//       lexeme += currentChar;
+//       advance();
+//     }
+//
+//     int value = std::stoi(lexeme);
+//     return Token(TokenType::INTEGER_CONST, lexeme, startLine, value);
+//   }
+// }
 Token Lexer::recognizeNumber() {
   int startLine = currentLine;
   std::string lexeme;
 
-  // 处理0的情况
-  if (currentChar == '0') {
+  // 读取整数部分（至少一位）
+  while (!eofReached && std::isdigit(currentChar)) {
     lexeme += currentChar;
     advance();
+  }
 
-    // 十六进制
-    if (currentChar == 'x' || currentChar == 'X') {
+  // 如果遇到小数点，尝试解析浮点数（要求小数点后至少有一位数字）
+  if (!eofReached && currentChar == '.') {
+    char next = peek();
+    if (std::isdigit(next)) {
+      // 这是一个浮点数字面量
+      lexeme += currentChar; // 添加 '.'
+      advance();             // 跳过 '.'
+      bool hasFrac = false;
+      while (!eofReached && std::isdigit(currentChar)) {
+        hasFrac = true;
+        lexeme += currentChar;
+        advance();
+      }
+      if (!hasFrac) {
+        // 小数点后没有数字 —— 视为词法错误
+        ErrorHandler::reportLexicalError(startLine,
+                                         "非法浮点数: '" + lexeme + "'");
+        return Token(TokenType::ERROR, lexeme, startLine);
+      }
+      // 返回浮点数 token（保留 lexeme，value 字段不使用）
+      return Token(TokenType::FLOAT_CONST, lexeme, startLine);
+    } else {
+      // 遇到 '.' 但后面不是数字：小数点不能作为其他用途，视为词法错误
+      // 不要消费 '.', 让上层处理（这里我们报告词法错误并消费）
+      std::string dot(1, currentChar);
+      ErrorHandler::reportLexicalError(startLine, "非法字符: '" + dot + "'");
+      advance();
+      return Token(TokenType::ERROR, dot, startLine);
+    }
+  }
+
+  // 没有小数点：处理八/十六进制的原实现逻辑（保留之前对 0x / 八进制 的处理）
+  // 处理以 0 开头的特殊情况
+  if (lexeme.size() > 0 && lexeme[0] == '0') {
+    // 已经读了至少 '0'
+    // 如果下一个字符是 x 或 X 并且我们还没有走到 EOF，则处理十六进制
+    if (!eofReached && (currentChar == 'x' || currentChar == 'X')) {
       lexeme += currentChar;
       advance();
-
       bool hasDigit = false;
       while (!eofReached && std::isxdigit(currentChar)) {
         hasDigit = true;
         lexeme += currentChar;
-
-        // 检查非法十六进制字符
-        if (!(std::isdigit(currentChar) ||
-              (currentChar >= 'a' && currentChar <= 'f') ||
-              (currentChar >= 'A' && currentChar <= 'F'))) {
-          ErrorHandler::reportLexicalError(startLine,
-                                           "非法十六进制数: '" + lexeme + "'");
-          return Token(TokenType::ERROR, lexeme, startLine);
-        }
         advance();
       }
-
       if (!hasDigit) {
         ErrorHandler::reportLexicalError(startLine, "十六进制数缺少数字: '" +
                                                         lexeme + "'");
         return Token(TokenType::ERROR, lexeme, startLine);
       }
-
-      // 转换十六进制数为十进制
       int value = std::stoi(lexeme.substr(2), nullptr, 16);
       return Token(TokenType::INTEGER_CONST, lexeme, startLine, value);
-    }
-    // 八进制或0
-    else {
+    } else {
+      // 处理可能的八进制（如果后续是数字）
       bool isOctal = false;
+      std::string octLex = lexeme;
       while (!eofReached && std::isdigit(currentChar)) {
         if (currentChar >= '8') {
           ErrorHandler::reportLexicalError(
-              startLine, "非法八进制数: '" + lexeme + currentChar + "'");
-          return Token(TokenType::ERROR, lexeme, startLine);
+              startLine, "非法八进制数: '" + octLex + currentChar + "'");
+          return Token(TokenType::ERROR, octLex + currentChar, startLine);
         }
         isOctal = true;
-        lexeme += currentChar;
+        octLex += currentChar;
         advance();
       }
-      (void)isOctal; // 避免未使用变量警告
-
-      if (lexeme == "0") {
-        return Token(TokenType::INTEGER_CONST, lexeme, startLine, 0);
+      if (octLex == "0") {
+        return Token(TokenType::INTEGER_CONST, octLex, startLine, 0);
       }
-
-      // 转换八进制数为十进制
-      int value = std::stoi(lexeme, nullptr, 8);
-      return Token(TokenType::INTEGER_CONST, lexeme, startLine, value);
+      int value = std::stoi(octLex, nullptr, 8);
+      return Token(TokenType::INTEGER_CONST, octLex, startLine, value);
     }
   }
-  // 十进制
-  else {
-    while (!eofReached && std::isdigit(currentChar)) {
-      lexeme += currentChar;
-      advance();
-    }
 
+  // 十进制整数（常规）
+  if (!lexeme.empty()) {
     int value = std::stoi(lexeme);
     return Token(TokenType::INTEGER_CONST, lexeme, startLine, value);
   }
+
+  // 如果没有读到任何数字（应该不会到这里），报告错误
+  ErrorHandler::reportLexicalError(startLine, "非法数字字面量");
+  return Token(TokenType::ERROR, lexeme, startLine);
 }
 
 Token Lexer::recognizeOperator() {

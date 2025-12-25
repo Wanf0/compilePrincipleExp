@@ -22,6 +22,7 @@ enum class TokenType {
 
   // 常量
   INTEGER_CONST,
+  FLOAT_CONST, // 新增：浮点常量
 
   // 运算符
   PLUS,

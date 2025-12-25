@@ -84,10 +84,10 @@ std::unique_ptr<ASTNode> Parser::parseCompUnit() {
   auto node = std::make_unique<NonTerminalNode>("CompUnit", startLine);
 
   // CompUnit → {Decl} {FuncDef} MainFuncDef
-  // 支持 INT / VOID / CONST 开头的声明或函数定义
+  // 支持 INT / VOID / FLOAT / CONST 开头的声明或函数定义
   while (true) {
     if (check(TokenType::CONST) || check(TokenType::INT) ||
-        check(TokenType::VOID)) {
+        check(TokenType::VOID) || check(TokenType::FLOAT)) {
       // 可能是声明或函数定义
       // 判断是否是函数定义：下下个 token 是否为 '('
       if (peek() == TokenType::LPAREN ||
@@ -181,7 +181,7 @@ std::unique_ptr<ASTNode> Parser::parseVarDecl() {
   if (btype)
     node->addChild(std::move(btype));
 
-  // 解析至少一个 VarDef（至少要有标识符）
+  // 解析至少一个 VarDef（每个 VarDef 封装为单独节点）
   bool first = true;
   while (true) {
     if (!first) {
@@ -201,29 +201,38 @@ std::unique_ptr<ASTNode> Parser::parseVarDecl() {
     // 读取变量名（在 consume 前保存）
     Token idTok = getToken();
     consume();
+    // 创建 VarDef 节点以便语义层区分下标与初始化
+    auto varDef = std::make_unique<NonTerminalNode>("VarDef", idTok.line);
     auto idNode =
         std::make_unique<TerminalNode>("ID", idTok.lexeme, idTok.line);
-    node->addChild(std::move(idNode));
+    varDef->addChild(std::move(idNode));
 
-    // 可选数组维度（简单处理：保存表达式作为子节点）
+    // 可选数组维度：每个维度生成一个 Index 节点，Index 内包含该维度表达式
     while (check(TokenType::LBRACKET)) {
       match(TokenType::LBRACKET);
       auto idxExp = parseExp();
+      auto indexNode = std::make_unique<NonTerminalNode>(
+          "Index", idxExp ? idxExp->getLine() : currentToken.line);
       if (idxExp)
-        node->addChild(std::move(idxExp));
+        indexNode->addChild(std::move(idxExp));
       if (!match(TokenType::RBRACKET)) {
         reportSyntaxError("缺少 ']'");
-        break;
       }
+      varDef->addChild(std::move(indexNode));
     }
 
-    // 可选初始化
+    // 可选初始化：把初始化表达式封装进 InitVal 节点
     if (check(TokenType::ASSIGN)) {
       match(TokenType::ASSIGN);
       auto init = parseExp();
+      auto initNode = std::make_unique<NonTerminalNode>(
+          "InitVal", init ? init->getLine() : currentToken.line);
       if (init)
-        node->addChild(std::move(init));
+        initNode->addChild(std::move(init));
+      varDef->addChild(std::move(initNode));
     }
+
+    node->addChild(std::move(varDef));
   }
 
   if (!match(TokenType::SEMICOLON)) {
@@ -275,7 +284,7 @@ std::unique_ptr<ASTNode> Parser::parseFuncDef() {
 
   return node;
 }
-// parseFuncType 示例片段：替换原来的 parseFuncType 函数
+
 std::unique_ptr<ASTNode> Parser::parseFuncType() {
   int startLine = currentToken.line;
   auto node = std::make_unique<NonTerminalNode>("FuncType", startLine);
@@ -305,7 +314,6 @@ std::unique_ptr<ASTNode> Parser::parseFuncType() {
   return node;
 }
 
-// parseBType 示例片段：替换原来的 parseBType 函数
 std::unique_ptr<ASTNode> Parser::parseBType() {
   int startLine = currentToken.line;
   auto node = std::make_unique<NonTerminalNode>("BType", startLine);
@@ -357,7 +365,7 @@ std::unique_ptr<ASTNode> Parser::parseBlockItem() {
 
   // BlockItem → Decl | Stmt
   if (check(TokenType::CONST) || check(TokenType::INT) ||
-      check(TokenType::VOID)) {
+      check(TokenType::VOID) || check(TokenType::FLOAT)) {
     // 可能是声明或函数调用表达式
     if (peek() == TokenType::LPAREN ||
         (peek() == TokenType::IDENTIFIER && tokenIndex + 2 < tokens.size() &&
@@ -617,11 +625,28 @@ std::unique_ptr<ASTNode> Parser::parsePrimaryExp() {
   }
 }
 
+// std::unique_ptr<ASTNode> Parser::parseNumber() {
+//   if (check(TokenType::INTEGER_CONST)) {
+//     auto token = getToken();
+//     auto node = std::make_unique<TerminalNode>("INTCON", token.lexeme,
+//                                                token.line, token.value);
+//     consume();
+//     return node;
+//   }
+//   reportSyntaxError("缺少数字常量");
+//   return nullptr;
+// }
 std::unique_ptr<ASTNode> Parser::parseNumber() {
   if (check(TokenType::INTEGER_CONST)) {
     auto token = getToken();
     auto node = std::make_unique<TerminalNode>("INTCON", token.lexeme,
                                                token.line, token.value);
+    consume();
+    return node;
+  } else if (check(TokenType::FLOAT_CONST)) {
+    auto token = getToken();
+    auto node =
+        std::make_unique<TerminalNode>("FLOATCON", token.lexeme, token.line);
     consume();
     return node;
   }

@@ -20,6 +20,7 @@ std::string tokenTypeToString(TokenType type) {
 
       // 常量
       {TokenType::INTEGER_CONST, "INTCON"},
+      {TokenType::FLOAT_CONST, "FLOATCON"},
 
       // 运算符
       {TokenType::PLUS, "PLUS"},
